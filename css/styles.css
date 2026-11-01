@@ -525,9 +525,3 @@ dialog::backdrop { background: rgba(4, 1, 2, 0.72); backdrop-filter: blur(4px); 
   .signatures div { text-align: center; font-size: 12px; color: #333; }
   .signatures span { display: block; border-top: 1px dotted #555; margin-bottom: 6px; }
 }
-
-/* Small "from a bank withdrawal" tick under Cash in hand */
-.withdraw-check { display: inline-flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
-.withdraw-check[hidden] { display: none; }
-.withdraw-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--gold); flex: none; }
-.withdraw-check:has(input:checked) { color: var(--income); }
