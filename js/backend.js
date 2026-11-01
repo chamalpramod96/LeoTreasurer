@@ -183,9 +183,11 @@ function createDemoBackend() {
     if (proof) proofs[`${monthId}/${id}`] = proof;
     else delete proofs[`${monthId}/${id}`];
   }
+  // Only the Super Admin may write to months other than the current one (same as firestore.rules).
+  const dateAllowed = (monthId) => isSuper(currentUser()) || monthId === currentMonthId();
   function requireOpenMonth(monthId) {
     const month = db().months[monthId];
-    if (!canEdit(currentUser()) || !month || month.locked) throw deny();
+    if (!canEdit(currentUser()) || !month || month.locked || !dateAllowed(monthId)) throw deny();
   }
 
   return {
@@ -221,6 +223,8 @@ function createDemoBackend() {
       if (!canEdit(user)) throw deny();
       const lockChange = 'locked' in patch && patch.locked !== (cur ? cur.locked : false);
       if ((lockChange || (cur && cur.locked)) && !isAdmin(user)) throw deny();
+      const onlyLock = Object.keys(patch).every((k) => k === "locked");
+      if (!onlyLock && !dateAllowed(id)) throw deny();
       db().months[id] = { locked: false, ...cur, ...patch, updatedBy: user.email, updatedAt: Date.now() };
       persist();
     },

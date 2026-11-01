@@ -360,7 +360,9 @@ function monthView(m) {
   const admin = isAdmin(state.user);
   const status = monthStatus(month);
   const locked = status === 'final';
-  const writable = editor && month && !locked;
+  // Treasurer and assistants work on the current month only; the Super Admin can also fill in past/future months.
+  const dateOk = isSuper(state.user) || id === currentMonthId();
+  const writable = editor && dateOk && month && !locked;
   const y = leoYearOf(id);
 
   const head = `
@@ -381,7 +383,7 @@ function monthView(m) {
     </div>
   </section>`;
 
-  if (!month) return head + notStartedView(m, editor);
+  if (!month) return head + notStartedView(m, editor && dateOk, editor);
 
   const printHead = `<div class="print-only print-head">
     <img src="assets/logo.webp" alt="">
@@ -389,6 +391,9 @@ function monthView(m) {
   </div>`;
 
   const notices = [];
+  if (editor && !dateOk && !locked) {
+    notices.push(`<p class="notice">${icon.lock}<span>Only the current month (${monthLabel(currentMonthId())}) can be edited. Ask the Super Admin to add or change entries in other months.</span></p>`);
+  }
   if (locked) {
     notices.push(`<p class="notice">${icon.lock}<span>This month is finalized. ${admin ? 'Reopen it to make changes.' : 'Only the Treasurer or Super Admin can reopen it.'}</span></p>`);
   }
@@ -478,10 +483,13 @@ function monthView(m) {
   return head + printHead + notices.join('') + kpis + summary + ledger + projects + signatures;
 }
 
-function notStartedView({ id, prev }, editor) {
+function notStartedView({ id, prev }, editor, isEditorRole = false) {
   if (!editor) {
+    const why = isEditorRole
+      ? `Only the current month (${monthLabel(currentMonthId())}) can be started. Ask the Super Admin to open other months.`
+      : `The treasurer hasn’t opened the ${monthLabel(id)} cash book yet.`;
     return `<section class="card empty-state">${icon.calendar}<h2>Not started yet</h2>
-      <p>The treasurer hasn’t opened the ${monthLabel(id)} cash book yet.</p></section>`;
+      <p>${why}</p></section>`;
   }
   const pc = prev.calc && prev.calc.closing;
   return `<section class="card start-card">
