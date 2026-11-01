@@ -5,12 +5,12 @@
 // 2. While apiKey is empty the app runs in DEMO MODE: sample data, kept only in this browser.
 
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyDMUIZApjozGUNChbl1ZgTRraty1rLVA5s",
+  authDomain: "leo-treasurer.firebaseapp.com",
+  projectId: "leo-treasurer",
+  storageBucket: "leo-treasurer.firebasestorage.app",
+  messagingSenderId: "123761549539",
+  appId: "1:123761549539:web:1771ec72ca75d17086a5d6",
 };
 
 export const settings = {
