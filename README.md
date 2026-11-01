@@ -77,7 +77,7 @@ People not on the Committee list can't read anything, even if they create an acc
 ## Monthly workflow
 
 1. **Months** → pick the month → **Start month**. Opening balances are pre-filled from last month's closing balances.
-2. **Add entry** for every amount received or paid: date, project, income/expense, cash in hand or bank, amount, optional details and receipt/voucher number.
+2. **Add entry** for every amount received or paid: date, project, income/expense, cash in hand or bank, amount, optional details and receipt/voucher number, and an optional **proof image** (photo of the receipt, bill or bank slip). Images are shrunk automatically and stored in Firestore, so the free plan is enough. Click **Proof** in the cash book to view or download one.
    - Depositing cash into the bank, or withdrawing it, is a **Transfer** — it moves money between cash and bank without counting as income or expense.
 3. The balance summary and cash book update straight away, with running cash and bank balances after every entry.
 4. At the end of the month the Treasurer checks the closing figures against the cash count and bank statement and presses **Finalize**. Assistants can no longer change a finalized month; the Treasurer can **Reopen** it.

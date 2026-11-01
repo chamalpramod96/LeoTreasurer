@@ -89,15 +89,35 @@ async function createFirebaseBackend() {
         updatedAt: millis(d.get('updatedAt')),
       }));
     },
-    addTransaction: (monthId, tx) =>
-      F.addDoc(F.collection(db, 'months', monthId, 'transactions'), {
-        ...tx,
-        createdBy: me,
-        createdAt: F.serverTimestamp(),
-        ...stamp(),
-      }),
-    updateTransaction: (monthId, id, tx) => F.updateDoc(F.doc(db, 'months', monthId, 'transactions', id), { ...tx, ...stamp() }),
-    deleteTransaction: (monthId, id) => F.deleteDoc(F.doc(db, 'months', monthId, 'transactions', id)),
+    // proof: a JPEG data URL to attach, null to remove, undefined to leave unchanged.
+    // Proof images live in months/{id}/proofs/{txId} so the cash book list stays small.
+    async addTransaction(monthId, tx, proof) {
+      const ref = F.doc(F.collection(db, 'months', monthId, 'transactions'));
+      const batch = F.writeBatch(db);
+      batch.set(ref, { ...tx, hasProof: !!proof, createdBy: me, createdAt: F.serverTimestamp(), ...stamp() });
+      if (proof) batch.set(F.doc(db, 'months', monthId, 'proofs', ref.id), { data: proof, ...stamp() });
+      await batch.commit();
+    },
+    async updateTransaction(monthId, id, tx, proof) {
+      const batch = F.writeBatch(db);
+      const patch = { ...tx, ...stamp() };
+      if (proof !== undefined) patch.hasProof = !!proof;
+      batch.update(F.doc(db, 'months', monthId, 'transactions', id), patch);
+      const proofRef = F.doc(db, 'months', monthId, 'proofs', id);
+      if (proof) batch.set(proofRef, { data: proof, ...stamp() });
+      else if (proof === null) batch.delete(proofRef);
+      await batch.commit();
+    },
+    async deleteTransaction(monthId, id) {
+      const batch = F.writeBatch(db);
+      batch.delete(F.doc(db, 'months', monthId, 'transactions', id));
+      batch.delete(F.doc(db, 'months', monthId, 'proofs', id));
+      await batch.commit();
+    },
+    async getProof(monthId, id) {
+      const snap = await F.getDoc(F.doc(db, 'months', monthId, 'proofs', id));
+      return snap.exists() ? snap.get('data') : null;
+    },
 
     async listMembers() {
       const snap = await F.getDocs(F.collection(db, 'members'));
@@ -158,6 +178,11 @@ function createDemoBackend() {
     const user = currentUser();
     listener(user ? { state: 'ready', user } : { state: 'signed-out' });
   }
+  function setProof(monthId, id, proof) {
+    const proofs = (db().proofs ||= {});
+    if (proof) proofs[`${monthId}/${id}`] = proof;
+    else delete proofs[`${monthId}/${id}`];
+  }
   function requireOpenMonth(monthId) {
     const month = db().months[monthId];
     if (!canEdit(currentUser()) || !month || month.locked) throw deny();
@@ -203,25 +228,35 @@ function createDemoBackend() {
     async listTransactions(monthId) {
       return clone(db().tx[monthId] || []);
     },
-    async addTransaction(monthId, tx) {
+    async addTransaction(monthId, tx, proof) {
       requireOpenMonth(monthId);
       const by = currentUser().email;
       const now = Date.now();
-      (db().tx[monthId] ||= []).push({ id: newId(), ...tx, createdBy: by, createdAt: now, updatedBy: by, updatedAt: now });
+      const id = newId();
+      (db().tx[monthId] ||= []).push({ id, ...tx, hasProof: !!proof, createdBy: by, createdAt: now, updatedBy: by, updatedAt: now });
+      if (proof) setProof(monthId, id, proof);
       persist();
     },
-    async updateTransaction(monthId, id, tx) {
+    async updateTransaction(monthId, id, tx, proof) {
       requireOpenMonth(monthId);
       const list = db().tx[monthId] || [];
       const i = list.findIndex((t) => t.id === id);
       if (i < 0) throw new Error('That entry no longer exists.');
       list[i] = { ...list[i], ...tx, updatedBy: currentUser().email, updatedAt: Date.now() };
+      if (proof !== undefined) {
+        list[i].hasProof = !!proof;
+        setProof(monthId, id, proof);
+      }
       persist();
     },
     async deleteTransaction(monthId, id) {
       requireOpenMonth(monthId);
       db().tx[monthId] = (db().tx[monthId] || []).filter((t) => t.id !== id);
+      setProof(monthId, id, null);
       persist();
+    },
+    async getProof(monthId, id) {
+      return (db().proofs || {})[`${monthId}/${id}`] || null;
     },
 
     async listMembers() {

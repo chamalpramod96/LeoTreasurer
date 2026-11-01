@@ -49,6 +49,8 @@ const icon = {
   up: svg('<path d="M7 17 17 7M7 7h10v10"/>'),
   down: svg('<path d="M17 7 7 17M17 17H7V7"/>'),
   swap: svg('<path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/>'),
+  camera: svg('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
+  clip: svg('<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>'),
   users: svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'),
 };
 
@@ -423,7 +425,11 @@ function monthView(m) {
   const entries = c.rows.length
     ? c.rows.map((tx) => {
         const sign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '';
-        const details = [tx.description ? esc(tx.description) : '', tx.ref ? `<span class="ref">${esc(tx.ref)}</span>` : ''].filter(Boolean).join(' ');
+        const details = [
+          tx.description ? esc(tx.description) : '',
+          tx.ref ? `<span class="ref">${esc(tx.ref)}</span>` : '',
+          tx.hasProof ? `<button class="proof-link" data-action="view-proof" data-id="${esc(tx.id)}" title="View proof image">${icon.clip}Proof</button>` : '',
+        ].filter(Boolean).join(' ');
         return `<tr title="Entered by ${esc(tx.createdBy || '')}">
           <td class="nowrap">${fmtDate(tx.date)}</td>
           <td class="proj">${esc(tx.project)}</td>
@@ -533,6 +539,14 @@ function entryDialog(tx) {
         <label class="field"><span>Details <i class="opt">(optional)</i></span><input name="description" maxlength="300" value="${esc(t.description || '')}" placeholder="What was it for?"></label>
         <label class="field"><span>Receipt / voucher no. <i class="opt">(optional)</i></span><input name="ref" maxlength="40" value="${esc(t.ref || '')}"></label>
       </div>
+      <div class="field"><span>Proof image <i class="opt">(optional — receipt, bill or bank slip)</i></span>
+        <div class="proof-box">
+          <img class="proof-thumb" alt="Proof preview" hidden>
+          <span class="proof-status muted">${tx && tx.hasProof ? 'Loading attached image…' : 'No image attached'}</span>
+          <label class="btn sm">${icon.camera}<span class="proof-pick">${tx && tx.hasProof ? 'Replace' : 'Attach image'}</span><input type="file" accept="image/*" data-proof-input hidden></label>
+          <button type="button" class="btn sm ghost danger" data-action="remove-proof"${tx && tx.hasProof ? '' : ' hidden'}>Remove</button>
+        </div>
+      </div>
       <p class="form-error" hidden></p>
     </div>
     <footer class="dlg-foot">
@@ -540,7 +554,72 @@ function entryDialog(tx) {
       <button type="submit" class="btn primary">${tx ? 'Save changes' : 'Add entry'}</button>
     </footer>
   </form>`);
-  syncEntryForm(dialog.querySelector('form'));
+  const form = dialog.querySelector('form');
+  syncEntryForm(form);
+  state.proofDraft = undefined; // undefined = unchanged, string = new image, null = remove
+  if (tx && tx.hasProof) {
+    state.be.getProof(id, tx.id).then((src) => {
+      if (form.isConnected && state.proofDraft === undefined) showProof(form, src, src ? 'Image attached' : 'No image attached');
+    });
+  }
+}
+
+function showProof(form, src, status) {
+  const img = form.querySelector('.proof-thumb');
+  img.hidden = !src;
+  if (src) img.src = src;
+  else img.removeAttribute('src');
+  form.querySelector('.proof-status').textContent = status;
+  form.querySelector('.proof-pick').textContent = src ? 'Replace' : 'Attach image';
+  form.querySelector('[data-action="remove-proof"]').hidden = !src;
+}
+
+// Shrink a photo to a JPEG small enough to store in the database (~700 KB max).
+async function compressImage(file) {
+  if (!file.type.startsWith('image/')) throw new Error('Choose an image file (JPG or PNG).');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('This image format can’t be read here. Try a JPG or PNG (or a screenshot of it).'));
+      el.src = url;
+    });
+    for (const [side, quality] of [[1600, 0.75], [1280, 0.7], [1024, 0.6], [800, 0.55]]) {
+      const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const data = canvas.toDataURL('image/jpeg', quality);
+      if (data.length < 700000) return data;
+    }
+    throw new Error('That image is too large even after shrinking. Try a smaller photo.');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function viewProof(tx) {
+  openDialog(`<div class="dlg">
+    <header class="dlg-head"><div><h2>Proof</h2><p class="muted">${fmtDate(tx.date)} · ${esc(tx.project)} · ${money(tx.amt)}</p></div>
+      <button type="button" class="btn icon ghost" data-action="close-dialog" aria-label="Close">${icon.x}</button></header>
+    <div class="dlg-body proof-view">${loading()}</div>
+    <footer class="dlg-foot"><button type="button" class="btn ghost" data-action="close-dialog">Close</button></footer>
+  </div>`);
+  const body = dialog.querySelector('.proof-view');
+  try {
+    const src = await state.be.getProof(state.month.id, tx.id);
+    if (!body.isConnected) return;
+    body.innerHTML = src
+      ? `<img src="${src}" alt="Proof for ${esc(tx.project)}"><a class="btn sm" href="${src}" download="proof-${tx.date}-${esc(tx.id)}.jpg">${icon.download}Download</a>`
+      : '<p class="muted">No image found for this entry.</p>';
+  } catch (err) {
+    body.innerHTML = `<p class="form-error">${esc(errorText(err))}</p>`;
+  }
 }
 
 // Relabel the account choice to match the entry type (e.g. "Paid from", "Cash → Bank").
@@ -609,8 +688,8 @@ function exportCsv() {
     ['Transfers', n(c.transfer.cash), n(c.transfer.bank), n(0)],
     ['Closing balance', n(c.closing.cash), n(c.closing.bank), n(total(c.closing))],
     [],
-    ['Date', 'Project', 'Details', 'Receipt/voucher', 'Type', 'Via', 'Amount', 'Cash in hand balance', 'Bank balance', 'Entered by'],
-    ...c.rows.map((tx) => [tx.date, tx.project, tx.description || '', tx.ref || '', TYPE_LABEL[tx.type], viaLabel(tx).replace('→', 'to'), n(tx.type === 'expense' ? -tx.amt : tx.amt), n(tx.cashBal), n(tx.bankBal), tx.createdBy || '']),
+    ['Date', 'Project', 'Details', 'Receipt/voucher', 'Type', 'Via', 'Amount', 'Cash in hand balance', 'Bank balance', 'Proof image', 'Entered by'],
+    ...c.rows.map((tx) => [tx.date, tx.project, tx.description || '', tx.ref || '', TYPE_LABEL[tx.type], viaLabel(tx).replace('→', 'to'), n(tx.type === 'expense' ? -tx.amt : tx.amt), n(tx.cashBal), n(tx.bankBal), tx.hasProof ? 'Yes' : '', tx.createdBy || '']),
   ];
   const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = `﻿${lines.map((r) => r.map(q).join(',')).join('\r\n')}`;
@@ -733,8 +812,8 @@ const forms = {
       project = d.account === 'cash' ? 'Cash deposited to bank' : 'Cash withdrawn from bank';
     }
     const tx = { date: d.date, type: d.type, account: d.account, project, description: d.description.trim(), ref: d.ref.trim(), amount };
-    if (d.id) await state.be.updateTransaction(monthId, d.id, tx);
-    else await state.be.addTransaction(monthId, tx);
+    if (d.id) await state.be.updateTransaction(monthId, d.id, tx, state.proofDraft);
+    else await state.be.addTransaction(monthId, tx, state.proofDraft || undefined);
     dialog.close();
     toast(d.id ? 'Entry updated' : 'Entry added');
     await reloadMonth();
@@ -778,8 +857,24 @@ document.addEventListener('submit', async (e) => {
   }
 });
 
-document.addEventListener('change', (e) => {
+document.addEventListener('change', async (e) => {
   if (e.target.name === 'type' && e.target.closest('form[data-form="entry"]')) syncEntryForm(e.target.form);
+  if (e.target.matches('[data-proof-input]')) {
+    const input = e.target;
+    const form = input.closest('form');
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    form.querySelector('.proof-status').textContent = 'Preparing image…';
+    try {
+      const data = await compressImage(file);
+      state.proofDraft = data;
+      showProof(form, data, `${file.name} · ${Math.round((data.length * 0.75) / 1024)} KB`);
+    } catch (err) {
+      form.querySelector('.proof-status').textContent = '';
+      toast(errorText(err), 'error');
+    }
+  }
 });
 
 // ---- Actions ---------------------------------------------------------------------------------
@@ -816,6 +911,11 @@ const actions = {
   'close-dialog': () => dialog.close(),
   'add-entry': () => entryDialog(),
   'edit-entry': (el) => entryDialog(findTx(el.dataset.id)),
+  'view-proof': (el) => viewProof(state.month.calc.rows.find((t) => t.id === el.dataset.id)),
+  'remove-proof': (el) => {
+    state.proofDraft = null;
+    showProof(el.closest('form'), null, 'Image will be removed when you save');
+  },
   'delete-entry': async (el) => {
     const tx = findTx(el.dataset.id);
     if (!tx || !confirm(`Delete this entry?\n\n${fmtDate(tx.date)} · ${tx.project} · ${money(Math.round(tx.amount * 100))}`)) return;

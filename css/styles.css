@@ -357,6 +357,13 @@ tfoot th, tfoot td { border-top: 1px solid var(--line-strong); font-weight: 700;
 .ledger .bal.neg { color: var(--expense); }
 .ledger .bal-row td { background: rgba(226, 181, 74, 0.06); color: var(--gold-hi); font-weight: 600; }
 .ledger tfoot td { border-top: 1px solid var(--line-strong); }
+.proof-link {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 1px 8px;
+  border: 1px solid rgba(226, 181, 74, 0.35); border-radius: 6px; background: rgba(226, 181, 74, 0.08);
+  color: var(--gold-hi); font: 600 12px var(--font); cursor: pointer;
+}
+.proof-link svg { width: 12px; height: 12px; }
+.proof-link:hover { background: rgba(226, 181, 74, 0.18); }
 .row-actions { white-space: nowrap; text-align: right; width: 1%; }
 .empty-row { padding: 22px 0; text-align: center; color: var(--muted); }
 .compact { min-width: 440px; }
@@ -393,6 +400,14 @@ dialog::backdrop { background: rgba(4, 1, 2, 0.72); backdrop-filter: blur(4px); 
 .dlg-head h2 { font-family: var(--display); font-size: 20px; letter-spacing: -0.01em; font-weight: 700; color: var(--gold-hi); }
 .dlg-head p { margin: 2px 0 0; font-size: 13px; }
 .dlg-body { padding: 12px 20px 4px; }
+.proof-box {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: #0d0607;
+}
+.proof-box .proof-status { flex: 1 1 140px; font-size: 13px; }
+.proof-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line-strong); }
+.proof-view { display: grid; justify-items: center; gap: 12px; }
+.proof-view img { max-width: 100%; max-height: 65vh; border-radius: 10px; border: 1px solid var(--line); }
 .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px 20px; }
 
 #toast {

@@ -5,7 +5,8 @@ rules_version = '2';
 //
 // members/{email}                    { name, position }       committee allow-list (doc id = lower-case email)
 // months/{YYYY-MM}                   { openingCash, openingBank, locked }
-// months/{YYYY-MM}/transactions/{id} { date, type, account, project, description, ref, amount }
+// months/{YYYY-MM}/transactions/{id} { date, type, account, project, description, ref, amount, hasProof }
+// months/{YYYY-MM}/proofs/{id}       { data }  optional proof image for the entry with the same id
 //
 // Everyone on the committee list can read. Treasurer + assistant treasurers can write.
 // Only the Treasurer can finalize/reopen a month and manage the committee list.
@@ -93,13 +94,25 @@ service cloud.firestore {
         allow delete: if canEdit() && monthOpen(monthId);
       }
 
+      // ---- Optional proof image per entry (JPEG data URL, doc id = transaction id) ----
+      match /proofs/{txId} {
+        allow read: if isMember();
+        allow create, update: if canEdit() && monthOpen(monthId)
+          && request.resource.data.keys().hasOnly(['data', 'updatedBy', 'updatedAt'])
+          && request.resource.data.data is string
+          && request.resource.data.data.size() < 950000
+          && request.resource.data.data.matches('data:image/jpeg;base64,.*')
+          && stamped(request.resource.data);
+        allow delete: if canEdit() && monthOpen(monthId);
+      }
+
       function monthOpen(id) {
         let path = /databases/$(database)/documents/months/$(id);
         return exists(path) && get(path).data.locked == false;
       }
 
       function validTx(id, d) {
-        return d.keys().hasOnly(['date', 'type', 'account', 'project', 'description', 'ref', 'amount',
+        return d.keys().hasOnly(['date', 'type', 'account', 'project', 'description', 'ref', 'amount', 'hasProof',
                                  'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
           && d.date is string && d.date.matches(id + '-[0-3][0-9]')
           && d.type in ['income', 'expense', 'transfer']
@@ -108,6 +121,7 @@ service cloud.firestore {
           && d.description is string && d.description.size() <= 300
           && d.ref is string && d.ref.size() <= 40
           && d.amount is number && d.amount > 0 && d.amount < 100000000
+          && (!('hasProof' in d) || d.hasProof is bool)
           && stamped(d);
       }
     }
