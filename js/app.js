@@ -537,13 +537,12 @@ function entryDialog(tx) {
         ${radio('type', 'expense', 'Expense', 'Money paid')}
         ${radio('type', 'transfer', 'Transfer', 'Cash ⇄ bank')}
       </div>
-      <label class="withdraw-check" data-withdraw-row><input type="checkbox" name="withdrawal"${withdraw ? ' checked' : ''}>
-        <span><b>Bank withdrawal</b><small>Money taken out of the bank — moves it to cash in hand</small></span></label>
-      <div class="field" data-acct-row><span id="acct-label">Received into</span>
+      <div class="field"><span id="acct-label">Received into</span>
         <div class="seg two" role="radiogroup" aria-labelledby="acct-label">
           ${radio('account', 'cash', 'Cash in hand')}
           ${radio('account', 'bank', 'Bank')}
         </div>
+        <label class="withdraw-check" data-withdraw-row><input type="checkbox" name="withdrawal"${withdraw ? ' checked' : ''}> This is from a bank withdrawal</label>
       </div>
       <div class="grid2">
         <label class="field"><span>Date</span><input type="date" name="date" min="${id}-01" max="${lastDayIso(id)}" value="${esc(t.date)}" required></label>
@@ -655,9 +654,9 @@ function syncEntryForm(form) {
     form.querySelector('[data-label="account-cash"]').insertAdjacentHTML('afterend', `<small>${labels[3]}</small>`);
     form.querySelector('[data-label="account-bank"]').insertAdjacentHTML('afterend', `<small>${labels[4]}</small>`);
   }
-  const withdraw = type === 'income' && form.elements.withdrawal.checked;
-  form.querySelector('[data-withdraw-row]').hidden = type !== 'income';
-  form.querySelector('[data-acct-row]').hidden = withdraw;
+  const showTick = type === 'income' && form.elements.account.value === 'cash';
+  form.querySelector('[data-withdraw-row]').hidden = !showTick;
+  const withdraw = showTick && form.elements.withdrawal.checked;
   form.elements.project.required = type !== 'transfer' && !withdraw;
   form.querySelector('[data-opt-project]').hidden = type !== 'transfer' && !withdraw;
 }
@@ -827,7 +826,7 @@ const forms = {
     if (!(amount > 0)) throw new Error('Enter an amount greater than zero.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date) || !d.date.startsWith(`${monthId}-`)) throw new Error(`Pick a date in ${monthLabel(monthId)}.`);
     if (!['income', 'expense', 'transfer'].includes(d.type) || !['cash', 'bank'].includes(d.account)) throw new Error('Choose a type and account.');
-    if (d.type === 'income' && d.withdrawal) { d.type = 'transfer'; d.account = 'bank'; }
+    if (d.type === 'income' && d.account === 'cash' && d.withdrawal) { d.type = 'transfer'; d.account = 'bank'; }
     let project = d.project.trim();
     if (!project) {
       if (d.type !== 'transfer') throw new Error('Enter the project this belongs to.');
@@ -880,7 +879,7 @@ document.addEventListener('submit', async (e) => {
 });
 
 document.addEventListener('change', async (e) => {
-  if ((e.target.name === 'type' || e.target.name === 'withdrawal') && e.target.closest('form[data-form="entry"]')) syncEntryForm(e.target.form);
+  if (['type', 'account', 'withdrawal'].includes(e.target.name) && e.target.closest('form[data-form="entry"]')) syncEntryForm(e.target.form);
   if (e.target.matches('[data-proof-input]')) {
     const input = e.target;
     const form = input.closest('form');
