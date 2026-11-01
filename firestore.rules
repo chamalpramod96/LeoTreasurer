@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// Leo Treasurer — Firestore security rules.
+// Paste into Firebase Console → Firestore Database → Rules, then Publish.
+//
+// members/{email}                    { name, position }       committee allow-list (doc id = lower-case email)
+// months/{YYYY-MM}                   { openingCash, openingBank, locked }
+// months/{YYYY-MM}/transactions/{id} { date, type, account, project, description, ref, amount }
+//
+// Everyone on the committee list can read. Treasurer + assistant treasurers can write.
+// Only the Treasurer can finalize/reopen a month and manage the committee list.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function verified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function memberPath() {
+      return /databases/$(database)/documents/members/$(myEmail());
+    }
+    function isMember() {
+      return verified() && exists(memberPath());
+    }
+    function position() {
+      return get(memberPath()).data.position;
+    }
+    function isTreasurer() {
+      return isMember() && position() == 'treasurer';
+    }
+    function canEdit() {
+      return isMember() && position() in ['treasurer', 'asst_treasurer_1', 'asst_treasurer_2', 'asst_treasurer_3'];
+    }
+    function stamped(d) {
+      return d.updatedBy == myEmail() && d.updatedAt == request.time;
+    }
+
+    // ---- Committee allow-list ----
+    match /members/{memberEmail} {
+      allow get: if verified() && (memberEmail == myEmail() || isMember());
+      allow list: if isMember();
+      allow create, update: if isTreasurer() && validMember(memberEmail, request.resource.data);
+      allow delete: if isTreasurer();
+
+      function validMember(id, d) {
+        return id == id.lower()
+          && d.keys().hasOnly(['name', 'position', 'updatedBy', 'updatedAt'])
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+          && d.position in ['president', 'ipp', 'vice_president', 'secretary', 'treasurer',
+                            'asst_treasurer_1', 'asst_treasurer_2', 'asst_treasurer_3']
+          && stamped(d);
+      }
+    }
+
+    // ---- Months ----
+    match /months/{monthId} {
+      allow read: if isMember();
+      allow create: if canEdit()
+        && monthId.matches('[0-9]{4}-(0[1-9]|1[0-2])')
+        && validMonth(request.resource.data)
+        && request.resource.data.locked == false;
+      // Assistants may only edit an open month and can't change the lock; the Treasurer can do both.
+      allow update: if canEdit() && validMonth(request.resource.data)
+        && (isTreasurer() || (resource.data.locked == false && request.resource.data.locked == false));
+      allow delete: if false;
+
+      function validMonth(d) {
+        return d.keys().hasOnly(['openingCash', 'openingBank', 'locked', 'updatedBy', 'updatedAt'])
+          && d.openingCash is number && d.openingBank is number
+          && d.locked is bool
+          && stamped(d);
+      }
+
+      // ---- Cash book entries ----
+      match /transactions/{txId} {
+        allow read: if isMember();
+        allow create: if canEdit() && monthOpen(monthId) && validTx(monthId, request.resource.data)
+          && request.resource.data.createdBy == myEmail()
+          && request.resource.data.createdAt == request.time;
+        allow update: if canEdit() && monthOpen(monthId) && validTx(monthId, request.resource.data)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if canEdit() && monthOpen(monthId);
+      }
+
+      function monthOpen(id) {
+        let path = /databases/$(database)/documents/months/$(id);
+        return exists(path) && get(path).data.locked == false;
+      }
+
+      function validTx(id, d) {
+        return d.keys().hasOnly(['date', 'type', 'account', 'project', 'description', 'ref', 'amount',
+                                 'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
+          && d.date is string && d.date.matches(id + '-[0-3][0-9]')
+          && d.type in ['income', 'expense', 'transfer']
+          && d.account in ['cash', 'bank']
+          && d.project is string && d.project.size() > 0 && d.project.size() <= 120
+          && d.description is string && d.description.size() <= 300
+          && d.ref is string && d.ref.size() <= 40
+          && d.amount is number && d.amount > 0 && d.amount < 100000000
+          && stamped(d);
+      }
+    }
+  }
+}
