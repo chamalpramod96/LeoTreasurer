@@ -14,7 +14,7 @@ export const firebaseConfig = {
 };
 
 export const settings = {
-  clubName: "Leo Club",        // e.g. "Leo Club of Colombo Central"
+  clubName: "Leo Club of Moratuwa",
   currencySymbol: "Rs.",
   locale: "en-LK",              // number formatting: 1,234,567.50
   leoYearStartMonth: 7,         // Leo year runs July → June

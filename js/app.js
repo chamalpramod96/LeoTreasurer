@@ -116,7 +116,7 @@ function authLayout(inner) {
     <div class="auth-inner">
       <img class="auth-logo" src="assets/logo.webp" alt="Leo Treasurer">
       <div class="auth-card">${inner}</div>
-      <p class="auth-foot">${esc(settings.clubName)} · Executive committee access only</p>
+      <p class="auth-foot">${esc(settings.clubName)}</p>
     </div>
   </div>`;
 }
@@ -129,7 +129,7 @@ function authNote() {
 
 const authViews = {
   signin: () => `
-    <h1 class="auth-title">Committee sign-in</h1>
+    <h1 class="auth-title">Sign in</h1>
     <p class="auth-sub">Monthly treasurer report</p>
     ${authNote()}
     <form data-form="signin" class="stack" novalidate>
