@@ -2,10 +2,11 @@
 
 A small web app for the club's **monthly treasurer report**. Pick a month, enter the opening cash in hand and bank balance, record every amount received or paid during the month, and the app works out the closing cash in hand and bank balance, a balance summary, a per-project breakdown, a printable report and a CSV export.
 
-Only the 8 executive-committee positions can sign in:
+Only a Super Admin and the 8 executive-committee positions can sign in:
 
 | Position | Access |
 |---|---|
+| Super Admin | Everything: edit, finalize/reopen, manage the whole committee list including the Super Admin |
 | President | View |
 | Immediate Past President | View |
 | Vice President | View |
@@ -47,13 +48,15 @@ Open http://localhost:8080 and pick any position to sign in as.
 4. **Firestore → Rules**: replace everything with the contents of [`firestore.rules`](firestore.rules) and click **Publish**.
 5. **Project settings (gear) → General → Your apps → Web (`</>`)** → register an app (no hosting) and copy the `firebaseConfig` values into [`js/config.js`](js/config.js). Also set your club name there.
 
-### 2. Add the first Treasurer
+### 2. Add the Super Admin
 
-The Treasurer manages everyone else from inside the app, but the first one has to be added by hand:
+The Super Admin manages everyone else from inside the app, but has to be added by hand once:
 
 1. **Firestore → Data → Start collection** → collection ID `members`.
-2. Document ID: the treasurer's email in **lower case**, e.g. `treasurer@gmail.com`.
-3. Fields: `name` (string) = `Leo Your Name`, `position` (string) = `treasurer`.
+2. Document ID: the super admin's email in **lower case**, e.g. `admin@gmail.com`.
+3. Fields: `name` (string) = `Your Name`, `position` (string) = `super_admin`.
+
+The Treasurer can also manage the 8 committee positions, but can't change or remove the Super Admin.
 
 ### 3. Publish on GitHub Pages
 
@@ -64,9 +67,9 @@ The Treasurer manages everyone else from inside the app, but the first one has t
 
 ### 4. First sign-in
 
-1. The Treasurer opens the site → **First time? Set up your account** → same email → chooses a password.
+1. The Super Admin opens the site → **First time? Set up your account** → same email → chooses a password.
 2. Clicks the verification link that arrives by email (check spam), then **I've verified — continue**.
-3. Goes to **Committee**, fills in the name and email for the other 7 positions and presses **Save** on each row.
+3. Goes to **Committee**, fills in the name and email for the 8 positions and presses **Save** on each row.
 4. Each of them does the same "First time? Set up your account" step with their own email.
 
 People not on the Committee list can't read anything, even if they create an account.
@@ -82,7 +85,7 @@ People not on the Committee list can't read anything, even if they create an acc
 
 ## New committee each Leo year
 
-The outgoing Treasurer replaces the emails on the **Committee** page. When the Treasurer position itself changes, the outgoing Treasurer enters the new Treasurer's email in that row last — they lose access as soon as they save. If nobody with Treasurer access is left, the Firebase project owner can fix the `members` collection in the Firebase console.
+The outgoing Treasurer replaces the emails on the **Committee** page. When the Treasurer position itself changes, the outgoing Treasurer enters the new Treasurer's email in that row last — they lose access as soon as they save. The Super Admin stays across years and can fix any position. If even the Super Admin is lost, the Firebase project owner can fix the `members` collection in the Firebase console.
 
 ## Settings
 

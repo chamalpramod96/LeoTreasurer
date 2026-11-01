@@ -27,11 +27,15 @@ service cloud.firestore {
     function position() {
       return get(memberPath()).data.position;
     }
+    function isSuper() {
+      return isMember() && position() == 'super_admin';
+    }
+    // "Treasurer" powers (finalize months, manage committee) — the Super Admin has them too.
     function isTreasurer() {
-      return isMember() && position() == 'treasurer';
+      return isMember() && position() in ['super_admin', 'treasurer'];
     }
     function canEdit() {
-      return isMember() && position() in ['treasurer', 'asst_treasurer_1', 'asst_treasurer_2', 'asst_treasurer_3'];
+      return isMember() && position() in ['super_admin', 'treasurer', 'asst_treasurer_1', 'asst_treasurer_2', 'asst_treasurer_3'];
     }
     function stamped(d) {
       return d.updatedBy == myEmail() && d.updatedAt == request.time;
@@ -41,14 +45,18 @@ service cloud.firestore {
     match /members/{memberEmail} {
       allow get: if verified() && (memberEmail == myEmail() || isMember());
       allow list: if isMember();
-      allow create, update: if isTreasurer() && validMember(memberEmail, request.resource.data);
-      allow delete: if isTreasurer();
+      // Only the Super Admin may create, change or remove a Super Admin entry.
+      allow create: if isTreasurer() && validMember(memberEmail, request.resource.data)
+        && (isSuper() || request.resource.data.position != 'super_admin');
+      allow update: if isTreasurer() && validMember(memberEmail, request.resource.data)
+        && (isSuper() || (request.resource.data.position != 'super_admin' && resource.data.position != 'super_admin'));
+      allow delete: if isTreasurer() && (isSuper() || resource.data.position != 'super_admin');
 
       function validMember(id, d) {
         return id == id.lower()
           && d.keys().hasOnly(['name', 'position', 'updatedBy', 'updatedAt'])
           && d.name is string && d.name.size() > 0 && d.name.size() <= 80
-          && d.position in ['president', 'ipp', 'vice_president', 'secretary', 'treasurer',
+          && d.position in ['super_admin', 'president', 'ipp', 'vice_president', 'secretary', 'treasurer',
                             'asst_treasurer_1', 'asst_treasurer_2', 'asst_treasurer_3']
           && stamped(d);
       }

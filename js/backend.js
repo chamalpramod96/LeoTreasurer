@@ -5,7 +5,7 @@
 //   { state: 'signed-out' } | { state: 'unverified', email } | { state: 'not-member', email }
 //   { state: 'error', email, error } | { state: 'ready', user: { email, name, position } }
 import { firebaseConfig } from './config.js';
-import { canEdit, computeMonth, currentMonthId, isAdmin, shiftMonth } from './lib.js';
+import { canEdit, computeMonth, currentMonthId, isAdmin, isSuper, shiftMonth } from './lib.js';
 
 const FIREBASE_VERSION = '10.12.2';
 export const normEmail = (e) => String(e || '').trim().toLowerCase();
@@ -228,14 +228,16 @@ function createDemoBackend() {
       return Object.entries(db().members).map(([email, m]) => ({ email, ...clone(m) }));
     },
     async saveMember(email, { name, position }, prevEmail) {
-      if (!isAdmin(currentUser())) throw deny();
       const members = db().members;
+      const touchesSuper = [position, members[email]?.position, members[prevEmail]?.position].includes('super_admin');
+      if (!isAdmin(currentUser()) || (touchesSuper && !isSuper(currentUser()))) throw deny();
       if (prevEmail && prevEmail !== email) delete members[prevEmail];
       members[email] = { name, position };
       persist();
     },
     async removeMember(email) {
-      if (!isAdmin(currentUser())) throw deny();
+      const target = db().members[email];
+      if (!isAdmin(currentUser()) || (target?.position === 'super_admin' && !isSuper(currentUser()))) throw deny();
       delete db().members[email];
       persist();
     },
@@ -245,6 +247,7 @@ function createDemoBackend() {
 // Four months of sample entries ending last month; the newest is a draft, older ones are finalized.
 function seedDemo() {
   const members = {
+    'admin@demo.leo': { name: 'Club Super Admin', position: 'super_admin' },
     'president@demo.leo': { name: 'Leo Nethmi Perera', position: 'president' },
     'ipp@demo.leo': { name: 'Leo Ravindu Silva', position: 'ipp' },
     'vp@demo.leo': { name: 'Leo Tharushi Fernando', position: 'vice_president' },

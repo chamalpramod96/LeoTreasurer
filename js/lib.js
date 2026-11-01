@@ -2,7 +2,9 @@
 import { settings } from './config.js';
 
 // The only positions that can sign in. Treasurer + assistants can edit; the treasurer also manages the list.
+// The Super Admin can do everything, including managing the Super Admin slot itself.
 export const POSITIONS = [
+  { id: 'super_admin', label: 'Super Admin', edit: true, admin: true, super: true },
   { id: 'president', label: 'President' },
   { id: 'ipp', label: 'Immediate Past President' },
   { id: 'vice_president', label: 'Vice President' },
@@ -16,6 +18,7 @@ export const POSITIONS = [
 export const positionInfo = (id) => POSITIONS.find((p) => p.id === id) || { id, label: 'Unknown position' };
 export const canEdit = (user) => !!user && !!positionInfo(user.position).edit;
 export const isAdmin = (user) => !!user && !!positionInfo(user.position).admin;
+export const isSuper = (user) => !!user && !!positionInfo(user.position).super;
 
 // ---- Months ("2026-10") ---------------------------------------------------
 

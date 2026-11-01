@@ -2,7 +2,7 @@
 import { settings } from './config.js';
 import { createBackend, normEmail } from './backend.js';
 import {
-  POSITIONS, canEdit, computeMonth, currentMonthId, esc, fmt, fmtDate, isAdmin, lastDayIso, leoYearLabel,
+  POSITIONS, canEdit, computeMonth, currentMonthId, esc, fmt, fmtDate, isAdmin, isSuper, lastDayIso, leoYearLabel,
   leoYearMonths, leoYearOf, money, monthLabel, monthName, parseAmount, parseMonthId, positionInfo, shiftMonth,
   todayIso, total,
 } from './lib.js';
@@ -388,7 +388,7 @@ function monthView(m) {
 
   const notices = [];
   if (locked) {
-    notices.push(`<p class="notice">${icon.lock}<span>This month is finalized. ${admin ? 'Reopen it to make changes.' : 'Only the Treasurer can reopen it.'}</span></p>`);
+    notices.push(`<p class="notice">${icon.lock}<span>This month is finalized. ${admin ? 'Reopen it to make changes.' : 'Only the Treasurer or Super Admin can reopen it.'}</span></p>`);
   }
   const pc = prev.calc && prev.calc.closing;
   if (pc && (pc.cash !== calc.opening.cash || pc.bank !== calc.opening.bank)) {
@@ -645,7 +645,8 @@ function committeeView(members) {
   const rows = POSITIONS.map((p) => {
     const m = byPos.get(p.id);
     const you = m && m.email === state.user.email ? ' <span class="you">You</span>' : '';
-    if (!admin) {
+    // Only the Super Admin can change the Super Admin slot.
+    if (!admin || (p.super && !isSuper(state.user))) {
       return `<div class="member-row read">
         <div class="mr-pos"><b>${esc(p.label)}</b>${accessPill(p)}</div>
         <div class="mr-name">${m ? esc(m.name) + you : '<span class="faint">Vacant</span>'}</div>
@@ -682,7 +683,7 @@ function committeeView(members) {
       <div>
         <p class="eyebrow">Access</p>
         <h1 class="title">Committee</h1>
-        <p class="sub">Only these ${POSITIONS.length} positions can sign in. The Treasurer and Assistant Treasurers can edit; everyone else can view.</p>
+        <p class="sub">Only these positions can sign in. The Super Admin, Treasurer and Assistant Treasurers can edit; everyone else can view.</p>
       </div>
     </section>
     <section class="card member-list">${rows}</section>
