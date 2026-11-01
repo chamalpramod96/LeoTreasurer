@@ -72,7 +72,10 @@ function statusPill(status) {
   return '<span class="pill none">Not started</span>';
 }
 const TYPE_LABEL = { income: 'Income', expense: 'Expense', transfer: 'Transfer' };
-const typePill = (type) => `<span class="pill ${type}">${TYPE_LABEL[type] || esc(type)}</span>`;
+const isWithdrawal = (tx) => tx.type === 'transfer' && tx.account === 'bank';
+const typePill = (type, tx) => tx && isWithdrawal(tx)
+  ? '<span class="pill income">Withdrawal</span>'
+  : `<span class="pill ${type}">${TYPE_LABEL[type] || esc(type)}</span>`;
 function viaLabel(tx) {
   if (tx.type !== 'transfer') return tx.account === 'bank' ? 'Bank' : 'Cash';
   return tx.account === 'bank' ? 'Bank → Cash' : 'Cash → Bank';
@@ -420,7 +423,8 @@ function monthView(m) {
         <tr><th scope="row">Opening balance <small>${fmtDate(`${id}-01`)}</small></th><td class="num">${fmt(c.opening.cash)}</td><td class="num">${fmt(c.opening.bank)}</td><td class="num">${fmt(total(c.opening))}</td></tr>
         <tr class="in"><th scope="row">Add: income received</th><td class="num">${signed(c.income.cash)}</td><td class="num">${signed(c.income.bank)}</td><td class="num">${signed(total(c.income))}</td></tr>
         <tr class="out"><th scope="row">Less: expenses paid</th><td class="num">${signed(-c.expense.cash)}</td><td class="num">${signed(-c.expense.bank)}</td><td class="num">${signed(-total(c.expense))}</td></tr>
-        <tr class="xfer"><th scope="row">Transfers cash ⇄ bank</th><td class="num">${signed(c.transfer.cash)}</td><td class="num">${signed(c.transfer.bank)}</td><td class="num">${fmt(0)}</td></tr>
+        ${c.withdrawal ? `<tr class="in"><th scope="row">Add: bank withdrawals to cash</th><td class="num">${signed(c.withdrawal)}</td><td class="num">${signed(-c.withdrawal)}</td><td class="num">${fmt(0)}</td></tr>` : ''}
+        ${c.deposit || !c.withdrawal ? `<tr class="xfer"><th scope="row">Cash deposited to bank</th><td class="num">${signed(-c.deposit)}</td><td class="num">${signed(c.deposit)}</td><td class="num">${fmt(0)}</td></tr>` : ''}
       </tbody>
       <tfoot><tr><th scope="row">Closing balance <small>${fmtDate(lastDayIso(id))}</small></th><td class="num">${moneyHtml(c.closing.cash)}</td><td class="num">${moneyHtml(c.closing.bank)}</td><td class="num">${moneyHtml(total(c.closing))}</td></tr></tfoot>
     </table></div>
@@ -439,7 +443,7 @@ function monthView(m) {
           <td class="nowrap">${fmtDate(tx.date)}</td>
           <td class="proj">${esc(tx.project)}</td>
           <td class="details">${details || '<span class="faint">—</span>'}</td>
-          <td>${typePill(tx.type)}</td>
+          <td>${typePill(tx.type, tx)}</td>
           <td class="nowrap via">${viaLabel(tx)}</td>
           <td class="num amt ${tx.type}">${sign}${fmt(tx.amt)}</td>
           <td class="num bal${tx.cashBal < 0 ? ' neg' : ''}">${fmt(tx.cashBal)}</td>
@@ -517,7 +521,10 @@ function openDialog(html) {
 
 function entryDialog(tx) {
   const { id } = state.month;
-  const t = tx || { type: 'income', account: 'cash', date: todayIso().startsWith(id) ? todayIso() : `${id}-01`, project: '', description: '', ref: '', amount: '' };
+  const t0 = tx || { type: 'income', account: 'cash', date: todayIso().startsWith(id) ? todayIso() : `${id}-01`, project: '', description: '', ref: '', amount: '' };
+  // A bank withdrawal is stored as a bank → cash transfer but entered under Income with a tick.
+  const withdraw = tx && isWithdrawal(tx);
+  const t = withdraw ? { ...t0, type: 'income', account: 'cash' } : t0;
   const radio = (name, value, label, sub) =>
     `<label><input type="radio" name="${name}" value="${value}"${t[name] === value ? ' checked' : ''}><span><b data-label="${name}-${value}">${label}</b>${sub ? `<small data-sub="${name}-${value}">${sub}</small>` : ''}</span></label>`;
   openDialog(`<form data-form="entry" class="dlg" novalidate>
@@ -530,7 +537,9 @@ function entryDialog(tx) {
         ${radio('type', 'expense', 'Expense', 'Money paid')}
         ${radio('type', 'transfer', 'Transfer', 'Cash ⇄ bank')}
       </div>
-      <div class="field"><span id="acct-label">Received into</span>
+      <label class="withdraw-check" data-withdraw-row><input type="checkbox" name="withdrawal"${withdraw ? ' checked' : ''}>
+        <span><b>Bank withdrawal</b><small>Money taken out of the bank — moves it to cash in hand</small></span></label>
+      <div class="field" data-acct-row><span id="acct-label">Received into</span>
         <div class="seg two" role="radiogroup" aria-labelledby="acct-label">
           ${radio('account', 'cash', 'Cash in hand')}
           ${radio('account', 'bank', 'Bank')}
@@ -646,8 +655,11 @@ function syncEntryForm(form) {
     form.querySelector('[data-label="account-cash"]').insertAdjacentHTML('afterend', `<small>${labels[3]}</small>`);
     form.querySelector('[data-label="account-bank"]').insertAdjacentHTML('afterend', `<small>${labels[4]}</small>`);
   }
-  form.elements.project.required = type !== 'transfer';
-  form.querySelector('[data-opt-project]').hidden = type !== 'transfer';
+  const withdraw = type === 'income' && form.elements.withdrawal.checked;
+  form.querySelector('[data-withdraw-row]').hidden = type !== 'income';
+  form.querySelector('[data-acct-row]').hidden = withdraw;
+  form.elements.project.required = type !== 'transfer' && !withdraw;
+  form.querySelector('[data-opt-project]').hidden = type !== 'transfer' && !withdraw;
 }
 
 function openingDialog() {
@@ -693,7 +705,8 @@ function exportCsv() {
     ['Opening balance', n(c.opening.cash), n(c.opening.bank), n(total(c.opening))],
     ['Income received', n(c.income.cash), n(c.income.bank), n(total(c.income))],
     ['Expenses paid', n(-c.expense.cash), n(-c.expense.bank), n(-total(c.expense))],
-    ['Transfers', n(c.transfer.cash), n(c.transfer.bank), n(0)],
+    ['Bank withdrawals to cash', n(c.withdrawal), n(-c.withdrawal), n(0)],
+    ['Cash deposited to bank', n(-c.deposit), n(c.deposit), n(0)],
     ['Closing balance', n(c.closing.cash), n(c.closing.bank), n(total(c.closing))],
     [],
     ['Date', 'Project', 'Details', 'Receipt/voucher', 'Type', 'Via', 'Amount', 'Cash in hand balance', 'Bank balance', 'Proof image', 'Entered by'],
@@ -814,6 +827,7 @@ const forms = {
     if (!(amount > 0)) throw new Error('Enter an amount greater than zero.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date) || !d.date.startsWith(`${monthId}-`)) throw new Error(`Pick a date in ${monthLabel(monthId)}.`);
     if (!['income', 'expense', 'transfer'].includes(d.type) || !['cash', 'bank'].includes(d.account)) throw new Error('Choose a type and account.');
+    if (d.type === 'income' && d.withdrawal) { d.type = 'transfer'; d.account = 'bank'; }
     let project = d.project.trim();
     if (!project) {
       if (d.type !== 'transfer') throw new Error('Enter the project this belongs to.');
@@ -866,7 +880,7 @@ document.addEventListener('submit', async (e) => {
 });
 
 document.addEventListener('change', async (e) => {
-  if (e.target.name === 'type' && e.target.closest('form[data-form="entry"]')) syncEntryForm(e.target.form);
+  if ((e.target.name === 'type' || e.target.name === 'withdrawal') && e.target.closest('form[data-form="entry"]')) syncEntryForm(e.target.form);
   if (e.target.matches('[data-proof-input]')) {
     const input = e.target;
     const form = input.closest('form');

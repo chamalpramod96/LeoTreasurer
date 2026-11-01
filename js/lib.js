@@ -127,6 +127,8 @@ export function computeMonth(month, txs) {
     income,
     expense,
     transfer,
+    withdrawal: rows.reduce((n, r) => n + (r.type === 'transfer' && r.account === 'bank' ? r.amt : 0), 0),
+    deposit: rows.reduce((n, r) => n + (r.type === 'transfer' && r.account !== 'bank' ? r.amt : 0), 0),
     closing: { ...bal },
     rows,
     projects: [...projects.values()].sort((a, b) => a.name.localeCompare(b.name)),
